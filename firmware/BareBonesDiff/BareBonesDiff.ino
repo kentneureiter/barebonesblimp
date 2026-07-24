@@ -493,6 +493,8 @@ void setup() {
     delay(3000);
     Serial.println("ESCs armed");
 
+    for (int i = 0; i < 13; i++) cmd.params[i] = 0.0f;
+    
     initEspNow();
     initIMU();
     initBaro();
@@ -502,17 +504,6 @@ void setup() {
     clockTime = micros();
     printTime = micros();
     Serial.println("=== ready ===");
-
-        for (int a = 0; a <= 180; a += 5) {
-        tiltServo.write(a);
-        Serial.println(a);
-        delay(25);
-    }
-    for (int a = 180; a >= 0; a -= 5) {
-         tiltServo.write(a);
-        Serial.println(a);
-        delay(25);
-    }
 }
 
 void loop() {
