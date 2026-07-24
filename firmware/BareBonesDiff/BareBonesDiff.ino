@@ -40,7 +40,7 @@
 // ---- Pins -----------------------------------------------------------------
 #define PIN_MOTOR1  D9
 #define PIN_MOTOR2  D10
-#define PIN_SERVO   D0
+#define PIN_SERVO   D1
 #define PIN_SDA     D4
 #define PIN_SCL     D5
 
@@ -95,6 +95,20 @@ static const float FX_GAIN      = 0.50f;  // W key -> forward thrust
 static const float COS_FLOOR = 0.30f;
 static const float DIFF_MAX  = 0.60f;
 
+// ---- Manual / bench mode --------------------------------------------------
+// Open-loop mode (params[3] > 0.5). No PIDs. Used to test actuators directly
+// and to fly by hand.
+//   throttle : params[2]  (0..1, latched on the ground station)
+//   yaw      : params[4]  (-1..1, splits the two motors)
+//   forward  : params[1]  (W held -> tilt servo forward by MANUAL_FWD_OFFSET)
+//   servo up : params[5]  (jogged servo angle that points the props UP)
+static const float MANUAL_YAW_DIFF   = 0.20f;   // f1-f2 spread at full A/D
+static const float MANUAL_FWD_OFFSET = -60.0f;  // servo deg added when W held.
+                                                // Tune this: the value that makes
+                                                // the props swing from up to fully
+                                                // forward IS your servo scale.
+static const float MANUAL_SERVO_UP   = 90.0f;   // fallback up-ref if none sent
+
 // ---- Loop timing ----------------------------------------------------------
 static const unsigned long TIME_STEP_US  = 5000;    // 200 Hz control
 static const unsigned long PRINT_STEP_US = 50000;   // 20 Hz telemetry
@@ -109,9 +123,11 @@ typedef struct ControlInput {
 } ControlInput;
 
 // params[0] = armed (0/1)
-// params[1] = fx    forward   (W)
-// params[2] = dz    up/down   (Q / E)
-// params[4] = dyaw  turn      (A / D)
+// params[1] = fx / forward   (W)
+// params[2] = dz  / throttle  (Q / E)   -- setpoint rate in PID, 0..1 in manual
+// params[3] = mode (0 = PID/auto, 1 = manual/bench)
+// params[4] = dyaw / yaw     (A / D)
+// params[5] = servo up-ref (deg)         -- manual only
 volatile ControlInput cmd;
 volatile bool     newCmd      = false;
 volatile unsigned long lastRxUs = 0;
@@ -137,6 +153,7 @@ bool  wasArmed = false;
 // Last values actually written to hardware, for telemetry.
 float outF1 = 0.0f, outF2 = 0.0f, outServoDeg = SERVO_CENTER_DEG;
 float dbgTauz = 0.0f, dbgFz = 0.0f, dbgThetaDeg = 0.0f;
+bool  outManual = false;   // which control path produced the last output
 
 unsigned long clockTime, printTime;
 
@@ -295,6 +312,27 @@ void disarm() {
     dbgThetaDeg = 0.0f;
 }
 
+// Manual mode, DISARMED: motors forced off, but the servo still tracks the
+// jogged reference so you can calibrate it with zero risk of spinning props.
+void manualIdle() {
+    writeMotor(motor1, 0.0f);
+    writeMotor(motor2, 0.0f);
+
+    bool  forwardHeld = cmd.params[1] > 0.5f;
+    float servoUp     = (cmd.params[5] > 1.0f) ? cmd.params[5] : MANUAL_SERVO_UP;
+    float servoDeg = clampf(servoUp + (forwardHeld ? MANUAL_FWD_OFFSET : 0.0f),
+                            SERVO_MIN_DEG, SERVO_MAX_DEG);
+    tiltServo.write((int)servoDeg);
+
+    outF1 = 0.0f;
+    outF2 = 0.0f;
+    outServoDeg = servoDeg;
+    dbgTauz = 0.0f;
+    dbgFz = 0.0f;
+    dbgThetaDeg = 0.0f;
+    outManual = true;
+}
+
 void controlStep(float dt) {
     float fxCmd   = cmd.params[1];
     float dzCmd   = cmd.params[2];
@@ -360,6 +398,38 @@ void controlStep(float dt) {
     dbgTauz = tauz;
     dbgFz = fz;
     dbgThetaDeg = thetaDeg;
+    outManual = false;
+}
+
+// Open-loop control. Nothing feeds back from the sensors; every actuator is a
+// direct function of the keys. This is the mode to test the servo scale and to
+// fly by hand.
+void manualControlStep(float /*dt*/) {
+    bool  forwardHeld = cmd.params[1] > 0.5f;
+    float throttle    = clampf(cmd.params[2], 0.0f, THROTTLE_CAP);
+    float dyaw        = clampf(cmd.params[4], -1.0f, 1.0f);
+    float servoUp     = (cmd.params[5] > 1.0f) ? cmd.params[5] : MANUAL_SERVO_UP;
+
+    // Differential split for yaw, applied symmetrically around the throttle.
+    float diff = dyaw * MANUAL_YAW_DIFF;
+    float f1 = clampf(throttle + 0.5f * diff, 0.0f, THROTTLE_CAP);
+    float f2 = clampf(throttle - 0.5f * diff, 0.0f, THROTTLE_CAP);
+
+    // Servo sits at the jogged "up" angle; W tilts it forward by a fixed offset.
+    float servoDeg = clampf(servoUp + (forwardHeld ? MANUAL_FWD_OFFSET : 0.0f),
+                            SERVO_MIN_DEG, SERVO_MAX_DEG);
+
+    writeMotor(motor1, f1);
+    writeMotor(motor2, f2);
+    tiltServo.write((int)servoDeg);
+
+    outF1 = f1;
+    outF2 = f2;
+    outServoDeg = servoDeg;
+    dbgTauz = 0.0f;
+    dbgFz = throttle;      // reuse the fz column to show commanded throttle
+    dbgThetaDeg = 0.0f;
+    outManual = true;
 }
 
 // ===========================================================================
@@ -370,12 +440,13 @@ void printTelemetry(bool armed) {
     // Header repeated occasionally so the columns are never a mystery.
     static int lineCount = 0;
     if (lineCount % 20 == 0) {
-        Serial.println(F("# armed,fx,dyaw,yawSP,yaw,tauz,zSP,alt,fz,theta,f1,f2,servo"));
+        Serial.println(F("# armed,mode,fx,dyaw,yawSP,yaw,tauz,zSP,alt,fz/thr,theta,f1,f2,servo"));
     }
     lineCount++;
 
     Serial.print("D,");
     Serial.print(armed ? 1 : 0);            Serial.print(",");
+    Serial.print(outManual ? "M" : "P");    Serial.print(",");
     Serial.print(cmd.params[1], 2);         Serial.print(",");
     Serial.print(cmd.params[4], 2);         Serial.print(",");
     Serial.print(yawSetpoint, 3);           Serial.print(",");
@@ -455,8 +526,11 @@ void loop() {
     }
     wasArmed = armed;
 
-    if (armed) controlStep(dt);
-    else       disarm();
+    bool manualMode = cmd.params[3] > 0.5f;
+    if (armed && manualMode)      manualControlStep(dt);
+    else if (armed)               controlStep(dt);
+    else if (manualMode)          manualIdle();   // servo joggable, motors off
+    else                          disarm();
 
     if (micros() - printTime > PRINT_STEP_US) {
         printTelemetry(armed);

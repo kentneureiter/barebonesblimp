@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+
+# Arduino build artifacts
+build/
+*.hex
+*.bin
+
+# OS
+.DS_Store

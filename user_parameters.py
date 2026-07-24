@@ -1,7 +1,12 @@
 ##### Insert your robot's MAC ADDRESS here ####
 ## (you can get it by running your arduino and looking at the serial monitor for your flying drone) ##
 
-robot_macs = ["34:85:18:8f:36:b0"] #["34:85:18:91:bc:94","34:85:18:91:c1:2c"]34:85:18:8F:36:B0][34:85:18:91:B7:4C], , 34:85:18:AB:FE:68, 34:85:18:8f:36:b0, 34:85:18:91:38:60
+# Active blimp = the MAC printed on the blimp's serial monitor at boot ("Blimp MAC: ...")
+robot_macs = ["34:85:18:8f:36:b0"]
+# Other blimps seen previously (paste one into the line above to switch):
+#   34:85:18:91:bc:94  34:85:18:91:c1:2c  34:85:18:8F:36:B0  34:85:18:91:B7:4C
+#   34:85:18:AB:FE:68  34:85:18:8f:36:b0  34:85:18:91:38:60  34:85:18:8f:36:b0
+# 	34:85:18:91:B7:4C
 tensile_masters = []#["34:85:18:91:bc:94"]
 tensile_followers = []#["34:85:18:91:bd:b0","dc:da:0c:57:ad:a4"]
 defender_macs = []
@@ -16,7 +21,7 @@ DEFENDER_MACS = [str.lower(robot) for robot in defender_macs]
 ## may look like "COM5" in windows or "/dev/tty.usbmodem14301" in mac  #
 ## look in arduino for the port that your specific transeiver is connected to  ##
 ## Note: make sure that your serial monitor is OFF in arduino or else you will get "access is denied" error. ##
-SERIAL_PORT = "/dev/cu.usbmodem1101"   #COM22
+SERIAL_PORT = "/dev/cu.usbmodem101"   #COM22
 
 
 
