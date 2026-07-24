@@ -470,20 +470,20 @@ void setup() {
     delay(500);
     Serial.println("\n=== BareBonesDiff starting ===");
 
-    for (int i = 0; i < 13; i++) cmd.params[i] = 0.0f;
-
     ESP32PWM::allocateTimer(0);
     ESP32PWM::allocateTimer(1);
     ESP32PWM::allocateTimer(2);
     ESP32PWM::allocateTimer(3);
 
+    tiltServo.setPeriodHertz(50);
+    tiltServo.attach(PIN_SERVO, 550, 2450);
+
     motor1.setPeriodHertz(50);
     motor2.setPeriodHertz(50);
-    tiltServo.setPeriodHertz(50);
 
     motor1.attach(PIN_MOTOR1, MOTOR_MIN_US, MOTOR_MAX_US);
     motor2.attach(PIN_MOTOR2, MOTOR_MIN_US, MOTOR_MAX_US);
-    tiltServo.attach(PIN_SERVO, 550, 2450);
+
 
     // Hold minimum throttle so the ESCs arm. No sweep, no integer math.
     Serial.println("Arming ESCs (min throttle, 3s)...");
@@ -502,6 +502,17 @@ void setup() {
     clockTime = micros();
     printTime = micros();
     Serial.println("=== ready ===");
+
+        for (int a = 0; a <= 180; a += 5) {
+        tiltServo.write(a);
+        Serial.println(a);
+        delay(25);
+    }
+    for (int a = 180; a >= 0; a -= 5) {
+         tiltServo.write(a);
+        Serial.println(a);
+        delay(25);
+    }
 }
 
 void loop() {

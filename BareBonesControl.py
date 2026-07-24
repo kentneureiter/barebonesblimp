@@ -48,7 +48,7 @@ TARGET_MAC = ROBOT_MACS[0]
 # Paste the MAC the blimp prints at boot ("Blimp MAC: ...") here. The program
 # refuses to start unless it matches TARGET_MAC -- this is the guard against
 # sending packets to a blimp that isn't listening. Set to None to skip.
-EXPECTED_BLIMP_MAC = "34:85:18:8f:36:b0" # 34:85:18:8f:36:b0 34:85:18:91:B7:4C
+EXPECTED_BLIMP_MAC = "34:85:18:91:b7:4c" # 34:85:18:8f:36:b0 34:85:18:91:B7:4C
 
 
 def build_params(armed, p1, p2, dyaw, mode=0.0, servo_up=0.0):
@@ -145,7 +145,6 @@ def main():
                 if not armed:
                     fx = dyaw = dz = 0.0
                 params = build_params(armed, fx, dz, dyaw, mode=0.0)
-
             serial_ctl.send_control_params(TARGET_MAC, params)
 
             # --- on-screen state ---
